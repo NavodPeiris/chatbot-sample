@@ -125,6 +125,10 @@ const ChatGeneral = () => {
 
     let topicToSend = topic;
 
+    if(detectedTopic !== 'none'){
+      topicToSend = detectedTopic;
+    }
+
     if(topicToSend === 'none' || topicToSend === ''){
       console.log("messages: ", messages)
       const detectedTopic = await fetch('http://localhost:3000/api/topicDetection', {
