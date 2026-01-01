@@ -1,4 +1,5 @@
 'use client';
+
 import {
   Conversation,
   ConversationContent,
@@ -23,17 +24,12 @@ import {
   PromptInputButton,
   PromptInputHeader,
   type PromptInputMessage,
-  PromptInputSelect,
-  PromptInputSelectContent,
-  PromptInputSelectItem,
-  PromptInputSelectTrigger,
-  PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputFooter,
   PromptInputTools,
 } from '@/components/ai-elements/prompt-input';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { CopyIcon, RefreshCcwIcon } from 'lucide-react';
 import {
@@ -53,64 +49,91 @@ import {
   ContextContent,
   ContextContentBody,
   ContextContentFooter,
-  ContextContentHeader,
   ContextInputUsage,
   ContextOutputUsage,
-  ContextReasoningUsage,
   ContextTrigger,
-} from "@/components/ai-elements/context";
-
+} from '@/components/ai-elements/context';
 import { Loader } from '@/components/ai-elements/loader';
-import { DefaultChatTransport, LanguageModelUsage, UIMessage } from 'ai';
+import {
+  DefaultChatTransport,
+  LanguageModelUsage,
+  UIMessage,
+} from 'ai';
 import { TOPICS, QId } from '../database/question_topic';
+import { usePathname } from 'next/navigation';
 
 export type MyUIMessage = UIMessage<
-  never, // metadata type
+  never,
   {
     usage: LanguageModelUsage;
-  } // data parts type
+  }
 >;
 
-const ChatQuestion = ({ questionId }: {questionId: string}) => {
+const sessionKey = (questionId: string) =>
+  `chatQuestion:${questionId}`;
+
+const ChatQuestion = ({ questionId }: { questionId: string }) => {
   const [input, setInput] = useState('');
+
+  // Restore messages from sessionStorage
+  const initialMessages =
+    typeof window !== 'undefined'
+      ? JSON.parse(
+          sessionStorage.getItem(sessionKey(questionId)) || '[]'
+        )
+      : [];
+
   const {
     messages,
     sendMessage,
     status,
     regenerate,
+    setMessages,
   } = useChat({
+    messages: initialMessages,
     transport: new DefaultChatTransport({
       api: '/api/chatQuestion',
     }),
   });
 
+  // Persist messages to sessionStorage
+  useEffect(() => {
+    if (messages.length > 0) {
+      sessionStorage.setItem(
+        sessionKey(questionId),
+        JSON.stringify(messages)
+      );
+    }
+  }, [messages, questionId]);
+
+
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text);
     const hasAttachments = Boolean(message.files?.length);
-    if (!(hasText || hasAttachments)) {
-      return;
-    }
+
+    if (!(hasText || hasAttachments)) return;
+
     sendMessage(
-      { 
+      {
         text: message.text || 'Sent with attachments',
-        files: message.files 
+        files: message.files,
       },
       {
         body: {
           topic: TOPICS[questionId as QId],
         },
-      },
+      }
     );
+
     setInput('');
   };
 
   const getCostData = (message: MyUIMessage) => {
-    const costPart = message.parts.filter(part => part.type === 'data-usage');
-    if(costPart.length){
-      return costPart[0].data;
-    }
-    return;
-  }
+    const part = message.parts.find(
+      (p) => p.type === 'data-usage'
+    );
+    return part?.data;
+  };
 
   return (
     <div className="max-w-4xl mx-8 relative size-full h-[600px]">
@@ -119,85 +142,110 @@ const ChatQuestion = ({ questionId }: {questionId: string}) => {
           <ConversationContent>
             {messages.map((message, i) => (
               <div key={message.id}>
-                {message.role === 'assistant' && message.parts.filter((part) => part.type === 'source-url').length > 0 && (
-                  <Sources>
-                    <SourcesTrigger
-                      count={
-                        message.parts.filter(
-                          (part) => part.type === 'source-url',
-                        ).length
-                      }
-                    />
-                    {message.parts.filter((part) => part.type === 'source-url').map((part, i) => (
-                      <SourcesContent key={`${message.id}-${i}`}>
-                        <Source
-                          key={`${message.id}-${i}`}
-                          href={part.url}
-                          title={part.url}
-                        />
-                      </SourcesContent>
-                    ))}
-                  </Sources>
-                )}
-                {message.parts.map((part) => {
-                  const costData = getCostData(message as MyUIMessage);
+                {message.role === 'assistant' &&
+                  message.parts.some(
+                    (p) => p.type === 'source-url'
+                  ) && (
+                    <Sources>
+                      <SourcesTrigger
+                        count={message.parts.filter(
+                          (p) => p.type === 'source-url'
+                        ).length}
+                      />
+                      {message.parts
+                        .filter((p) => p.type === 'source-url')
+                        .map((part, idx) => (
+                          <SourcesContent
+                            key={`${message.id}-${idx}`}
+                          >
+                            <Source
+                              href={part.url}
+                              title={part.url}
+                            />
+                          </SourcesContent>
+                        ))}
+                    </Sources>
+                  )}
+
+                {message.parts.map((part, idx) => {
+                  const costData = getCostData(
+                    message as MyUIMessage
+                  );
+
                   switch (part.type) {
                     case 'text':
                       return (
-                        <Message key={`${message.id}-${i}`} from={message.role}>
+                        <Message
+                          key={`${message.id}-${idx}`}
+                          from={message.role}
+                        >
                           <MessageContent>
                             <MessageResponse>
                               {part.text}
                             </MessageResponse>
                           </MessageContent>
-                          {message.role === 'assistant' && i === messages.length - 1 && (
-                            <MessageActions>
-                              <MessageAction
-                                onClick={() => regenerate()}
-                                label="Retry"
-                              >
-                                <RefreshCcwIcon className="size-3" />
-                              </MessageAction>
-                              <MessageAction
-                                onClick={() =>
-                                  navigator.clipboard.writeText(part.text)
-                                }
-                                label="Copy"
-                              >
-                                <CopyIcon className="size-3" />
-                              </MessageAction>
-                              {costData && (
-                                <Context
-                                  modelId="google:gemini-2.5-flash"
-                                  usage={costData}
+
+                          {message.role === 'assistant' &&
+                            i === messages.length - 1 && (
+                              <MessageActions>
+                                <MessageAction
+                                  onClick={() => regenerate()}
+                                  label="Retry"
                                 >
-                                  <ContextTrigger />
-                                  <ContextContent>
-                                    <ContextContentBody>
-                                      <ContextInputUsage />
-                                      <ContextOutputUsage />
-                                      <ContextCacheUsage />
-                                    </ContextContentBody>
-                                    <ContextContentFooter />
-                                  </ContextContent>
-                                </Context>
-                              )} 
-                            </MessageActions>
-                          )}
+                                  <RefreshCcwIcon className="size-3" />
+                                </MessageAction>
+
+                                <MessageAction
+                                  onClick={() =>
+                                    navigator.clipboard.writeText(
+                                      part.text
+                                    )
+                                  }
+                                  label="Copy"
+                                >
+                                  <CopyIcon className="size-3" />
+                                </MessageAction>
+
+                                {costData && (
+                                  <Context
+                                    modelId="google:gemini-2.5-flash"
+                                    usage={costData}
+                                  >
+                                    <ContextTrigger />
+                                    <ContextContent>
+                                      <ContextContentBody>
+                                        <ContextInputUsage />
+                                        <ContextOutputUsage />
+                                        <ContextCacheUsage />
+                                      </ContextContentBody>
+                                      <ContextContentFooter />
+                                    </ContextContent>
+                                  </Context>
+                                )}
+                              </MessageActions>
+                            )}
                         </Message>
                       );
-                  
+
                     case 'reasoning':
                       return (
                         <Reasoning
-                          key={`${message.id}-${i}`}
+                          key={`${message.id}-${idx}`}
                           className="w-full"
-                          isStreaming={status === 'streaming' && i === message.parts.length - 1 && message.id === messages.at(-1)?.id}
+                          isStreaming={
+                            status === 'streaming' &&
+                            idx === message.parts.length - 1 &&
+                            message.id ===
+                              messages.at(-1)?.id
+                          }
                         >
                           <ReasoningTrigger />
-                          <ReasoningContent>{part.text}</ReasoningContent>
+                          <ReasoningContent>
+                            {part.text}
+                          </ReasoningContent>
                         </Reasoning>
                       );
+
                     default:
                       return null;
                   }
@@ -208,33 +256,47 @@ const ChatQuestion = ({ questionId }: {questionId: string}) => {
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
-        <PromptInput onSubmit={handleSubmit} className="mt-4" globalDrop multiple>
+
+        <PromptInput
+          onSubmit={handleSubmit}
+          className="mt-4"
+          globalDrop
+          multiple
+        >
           <PromptInputHeader>
             <PromptInputAttachments>
-              {(attachment) => <PromptInputAttachment data={attachment} />}
+              {(attachment) => (
+                <PromptInputAttachment data={attachment} />
+              )}
             </PromptInputAttachments>
           </PromptInputHeader>
+
           <PromptInputBody>
             <PromptInputTextarea
-              onChange={(e) => setInput(e.target.value)}
               value={input}
+              onChange={(e) => setInput(e.target.value)}
             />
           </PromptInputBody>
+
           <PromptInputFooter>
             <PromptInputTools>
-                <PromptInputActionMenu>
-                    <PromptInputActionMenuTrigger />
-                    <PromptInputActionMenuContent>
-                        <PromptInputActionAddAttachments />
-                    </PromptInputActionMenuContent>
-                </PromptInputActionMenu>
+              <PromptInputActionMenu>
+                <PromptInputActionMenuTrigger />
+                <PromptInputActionMenuContent>
+                  <PromptInputActionAddAttachments />
+                </PromptInputActionMenuContent>
+              </PromptInputActionMenu>
             </PromptInputTools>
 
-            <PromptInputSubmit disabled={!input && !status} status={status} />
+            <PromptInputSubmit
+              disabled={!input && !status}
+              status={status}
+            />
           </PromptInputFooter>
         </PromptInput>
       </div>
     </div>
   );
 };
+
 export default ChatQuestion;

@@ -9,7 +9,7 @@ import {
 import { google } from "@ai-sdk/google";
 import { z } from 'zod';
 import { generateObject } from 'ai';
-import { CONTEXTS, ContextKey } from '../../database/topic_context';
+import { CONTEXTS, ContextKey, CONTEXTS_SECONDARY, SecContextKey } from '../../database/topic_context';
 
 export type MyUIMessage = UIMessage<
   never, // metadata type
@@ -18,10 +18,17 @@ export type MyUIMessage = UIMessage<
   } // data parts type
 >;
 
-const fetchContext = async(topic: string) => {
-  const context = CONTEXTS[topic as ContextKey];
+const fetchContext = async(topic: string, level: string) => {
+  let context = ''
+  if(level == 'secondary'){
+    context = CONTEXTS_SECONDARY[topic as SecContextKey];
+  }
+  else{
+    context = CONTEXTS[topic as ContextKey];
+  }
+
   console.log("detected topic: ", topic)
-  console.log("context used: ", context)
+  //console.log("context used: ", context)
   return context;
 }
 
@@ -29,12 +36,14 @@ const fetchContext = async(topic: string) => {
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-  const { messages, topic }: { messages: UIMessage[], topic: string } = await req.json();
+  const { messages, topic, level }: { messages: UIMessage[], topic: string, level: string } = await req.json();
+
+  console.log("level: ", level)
 
   // Convert user messages to model format
   const modelMessages = await convertToModelMessages(messages);
 
-  const contextText = await fetchContext(topic)
+  const contextText = await fetchContext(topic, level)
 
   const stream = createUIMessageStream<MyUIMessage>({
     execute: ({ writer }) => {

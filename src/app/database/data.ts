@@ -40,9 +40,21 @@ export const SUBJECT_TOPICS: Record<levelId, SubType[]> = {
   ],
   'secondary': [
     {
-        name: 'test',
-        value: 'test',
-        topics: []
+        name: 'Biology',
+        value: 'Biology',
+        topics: [
+          {
+            name: 'Inheritance',
+            value: 'Inheritance',
+          },
+        ]
+    },
+    {
+        name: 'Physics',
+        value: 'Physics',
+        topics: [
+
+        ]
     },
   ],
   'tertiary': [
@@ -68,6 +80,10 @@ export const SUBJECT_TOPICS: Record<levelId, SubType[]> = {
         name: 'Biology',
         value: 'Biology',
         topics: [
+            { 
+              name: 'Inheritance',
+              value: 'Inheritance',
+            },
             {
               name: 'Proteins',
               value: 'Proteins',

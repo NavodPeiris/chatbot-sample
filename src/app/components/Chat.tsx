@@ -33,7 +33,7 @@ import {
   PromptInputFooter,
   PromptInputTools,
 } from '@/components/ai-elements/prompt-input';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { CopyIcon, RefreshCcwIcon } from 'lucide-react';
 import {
@@ -90,11 +90,21 @@ const ChatGeneral = () => {
     value: string;
   }[]>([]);
 
+  const SESSION_KEY = 'chat'
+
   const [input, setInput] = useState('');
   const [level, setLevel] = useState<string>('none');
   const [subject, setSubject] = useState<string>('none');
   const [topic, setTopic] = useState<string>('none');
   const [detectedTopic, setDetectedTopic] = useState<string>('none');
+
+  // Restore messages from sessionStorage
+  const initialMessages =
+    typeof window !== 'undefined'
+      ? JSON.parse(
+          sessionStorage.getItem(SESSION_KEY) || '[]'
+        )
+      : [];
 
   const {
     messages,
@@ -102,6 +112,7 @@ const ChatGeneral = () => {
     status,
     regenerate,
   } = useChat({
+    messages: initialMessages,
     transport: new DefaultChatTransport({
       api: '/api/chat',
     }),
@@ -115,6 +126,14 @@ const ChatGeneral = () => {
     setTopicList([]);
     setDetectedTopic('none')
   }
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(messages));
+    }
+  }, [messages]);
+
+
 
   const handleSubmit = async(message: PromptInputMessage) => {
     const hasText = Boolean(message.text);
@@ -155,6 +174,7 @@ const ChatGeneral = () => {
       {
         body: {
           topic: topicToSend,
+          level: level
         },
       }
     );
